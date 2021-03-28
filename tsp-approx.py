@@ -10,6 +10,7 @@ Please don't look at it unless you are absolutely stuck, even after hours!
 
 # Import math.
 import math
+import copy
 ################################################################################
 
 """
@@ -72,6 +73,7 @@ The cities should be denoted by their rank (their numbering in adjList).
 """
 def tsp(adjList, start):
     ##### Your implementation goes here. #####
+    print(adjList)
 
     return tour
 
@@ -283,6 +285,8 @@ class Map:
         self.adjMat, self.cities, self.optTour = getMap(mapNum)[0:3]
         self.mapNum = mapNum
 
+        self.citiesCopy = self.cities.copy()
+
         # Create the adjList of vertices
         self.adjList = []
         for rank in range(0,len(self.cities)):
@@ -404,27 +408,193 @@ class Map:
                     self.mst.append(e)
         return
 
+    def findRoot(self, mst):
+        """
+        Function to find root of a minimum spanning tree based on most common
+        vertex.
+        """
+        vertexList = []
+        for edge in mst:
+            vertexList.extend(edge.vertices)
+        return max(set(vertexList), key = vertexList.count)
+
+    def dfs(self, root, tree):
+        origTree = tree.copy()
+        currNode = root
+        path = [root]
+        
+        while len(tree)> 0:
+            #print("while")
+            edgesTouchingNode = []
+            #Find all edges in tree that touch current node
+            for edge in tree:
+                stringVertices = []
+                for vertex in edge.vertices:
+                    stringVertices.append(str(vertex))
+                
+                if str(currNode) in stringVertices:
+                    edgesTouchingNode.append(edge)
+            #print(edgesTouchingNode)
+            #Take smallest path to new Node
+            if len(edgesTouchingNode) > 0 :
+                #Find shortest edge
+                minEdge = min(edgesTouchingNode)
+
+                #If edge to unvisited Edge
+                if minEdge.weight < math.inf: 
+                    #Add new city to path
+                    newCity = minEdge.vertices.copy()
+                    newCity.remove(currNode)
+                    if newCity not in path:
+                        #Set current node to new city and travelled Edge to weight inf
+                        currNode = newCity[0]
+                        minEdge.weight = math.inf
+
+                        #Add new city to path
+                        path.extend(newCity)
+
+                #Backtrack to previously visited nodes
+                else:
+                    #Get edge Vertice lists
+                    treeVertices = []
+                    for i in range(len(tree)):
+                        treeVertices.append(tree[i].vertices)
+                    
+                    #Get Delete previously visited Edge
+                    index = treeVertices.index(minEdge.vertices)
+                    tree.pop(index)
+                    
+                    #Add previously visited city back to path
+                    previousCity = minEdge.vertices.copy()
+                    prevCity = list(map(str, previousCity))
+                    cityIndex = prevCity.index(str(currNode))
+                    inverseIndex = abs(cityIndex-1)
+                    prevCity.remove(str(currNode))
+                    path.extend([previousCity[inverseIndex]])
+
+                    #Set current node to previously visted city
+                    currNode = previousCity[inverseIndex]
+            else:
+                break
+        return path
+    
+    def generateNumericPath(self,path):
+        numericPath = []
+        for city in path:
+            numericPath.append(self.citiesCopy.index(str(city)))
+        return numericPath
     """
     getTSPApprox: uses the MST to find the approximate solution to TSP.
     """
     def getTSPApprox(self):
+        self.getMST()
         if len(self.mst) > 0:
             ### TODO ###
             # Complete the TSP Approximation method here
             # Update the Map object with the TSP Approximate tour
+            root = self.findRoot(self.mst)
+            dfsPath = self.dfs(root,self.mst)
+           
+            #Delete any repeated cities in path
+            noRepeatsPath = []
+            stringPath = []
+
+            for city in dfsPath:
+                if city not in noRepeatsPath:
+                    noRepeatsPath.append(city)
+            
+            
+            noRepeatsPath.append(root)
+            approxDistance = self.getPathLen(noRepeatsPath)
+            self.tour = self.generateNumericPath(noRepeatsPath)
+            return approxDistance
         else:
             raise Exception('No MST set!')
-        return
+        return noRepeatsPath
 
+
+    def getPermutations(self, cityList):
+        '''
+        Function to generate all permutations of a list of cities,
+        quickPerm : https://www.quickperm.org/
+        '''
+
+        allPaths = []
+        numCities = len(cityList)
+        i = 1
+        p = list(range(0,numCities+1))
+        allPaths.append(cityList.copy())
+
+        while i < numCities:
+            p[i] -= 1
+            if i % 2 == 1:
+                j = p[i]
+
+            else:
+                j = 0
+            
+            cityList[j], cityList[i] = cityList[i], cityList[j]
+            allPaths.append(cityList.copy())
+            i = 1
+
+            while p[i] == 0:
+                p[i] = i
+                i += 1
+        
+        #Add start city to end of path to form full cycle
+        for perm in allPaths:
+            perm.extend([perm[0]])
+
+        
+        return allPaths
+        
+    def getPathLen(self, path):
+        """
+        Calculate length of a given path
+        """
+        #Initialize path Length to 0
+        pathLength = 0
+      
+        for i in range(len(path)-1):
+            #Get indices of next two cities in path 
+            #(Made a copy of city list so indices correspond to adjMatrix)
+            startCity =  str(path[i])
+            startCityIndex = self.citiesCopy.index(startCity)
+            endCity = str(path[i+1])
+            endCityIndex = self.citiesCopy.index(endCity)
+
+            #Get distance between the cities from adjMatrix
+            distance = self.adjMat[startCityIndex][endCityIndex]
+
+            #Add this diastance to total path length
+            pathLength += distance
+
+        #Return total path length  
+        return pathLength
+        
     """
     getTSPOptimal: brute-force approach to finding the optimal tour.
     """
     def getTSPOptimal(self):
-        ### TODO ###
-        # Complete a brute-force TSP solution!
-        # Replace the following two lines with an actual implementation.
-        self.tourOpt = getMap(self.mapNum)[3]
-        return None
+ 
+        #Generate all paths by calculating all possible permutations
+        allPaths = self.getPermutations(self.cities)
+
+        #Initialize optimal path and set length to infinity
+        optPath = []
+        optPathLength = math.inf
+
+        for path in allPaths:
+            #Get Length of a Path
+            pathLen = self.getPathLen(path)
+
+            #If its shortest thus far replace optimal Path/dist
+            if pathLen < optPathLength:
+                optPathLength = pathLen
+                optPath = path
+        self.tourOpt = self.generateNumericPath(optPath)
+        #Return Optimal Path, Distance
+        return optPath, optPathLength
 
     """
     clearMap: this function will reset the MST and tour for the map, along with
@@ -691,6 +861,7 @@ def testMSTApprox():
         MSTw = MSTws[ind]
         m = Map(ind)
         m.getMST()
+        
         if len(m.mst) < len(m.cities)-1:
             print('Test %d: Not enough edges in MST.' % ind)
             Mflag = True
@@ -738,6 +909,8 @@ def testMSTApprox():
             if ind == 7:
                 ans = 40030.173592
                 ans2 = 78992.875888
+                flag_right = False
+                flag_left = False
                 if (w < ans - tol) or (w > ans + tol):
                     print('Test %d: Wrong TSP (when traversing the tree via DFS from left to right)!' % ind)
                     flag_left = True
@@ -820,10 +993,14 @@ def test2approx():
 
 # Build MST with Prim's Algorithm, then find the approximate solution to the TSP problem.
 # Print the results.
+
 s = testMSTApprox()
 print(s)
 
 # Check if the MST approximation approach is a 2-approximation of the optimal solution.
 # In interest of time, only test on the first four maps.
+
 s = test2approx()
 print(s)
+
+
