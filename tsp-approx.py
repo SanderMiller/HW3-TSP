@@ -10,7 +10,6 @@ Please don't look at it unless you are absolutely stuck, even after hours!
 
 # Import math.
 import math
-import copy
 ################################################################################
 
 """
